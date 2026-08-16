@@ -56,6 +56,15 @@ services:
       - backend
     restart: unless-stopped
 
+  # Optional: React admin dashboard (timetable / teachers / events from Firebase)
+  dashboard:
+    build: ./dashboard
+    container_name: campusai-dashboard
+    profiles: ["dashboard"]
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
 volumes:
   chroma-data:
   ollama-data:
