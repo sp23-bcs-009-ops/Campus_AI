@@ -10,17 +10,17 @@ const fetch    = require('node-fetch');
 const app  = express();
 const PORT = 3000;
 
-// ── Firebase config (同じプロジェクト) ────────────────────────────────────
+// ── Firebase config (same project as the app) ────────────────────────────
 const PROJECT_ID = 'universityassistentai';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 
 app.use(cors());
 app.use(express.json());
 
-// PDF一時保存先
+// Temporary storage for uploaded PDFs
 const upload = multer({ dest: 'uploads/' });
 
-// ── Firestore保存ヘルパー ─────────────────────────────────────────────────
+// ── Firestore save helper ─────────────────────────────────────────────────
 async function saveToFirestore(data) {
   const fields = {};
   for (const [k, v] of Object.entries(data)) {
@@ -40,24 +40,24 @@ async function saveToFirestore(data) {
   return await res.json();
 }
 
-// ── テキストからタイムテーブルJSONをパース ────────────────────────────────
+// ── Parse timetable JSON from OCR text ────────────────────────────────────
 function parseTimetableText(fullText) {
   const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // 曜日パターン
+  // Day patterns
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-  // 時間スロットパターン (例: 08:30, 9:45 など)
+  // Time slot patterns (e.g. 08:30, 9:45)
   const timeRegex = /(\d{1,2}:\d{2})/g;
 
-  // 部屋パターン (LT1〜LT9)
+  // Room patterns (LT1–LT9)
   const roomRegex = /\b(LT\d|Lab\d?)\b/gi;
 
   const roomMap = {};
   const subjectSet = new Set();
   const displayRows = [];
 
-  // バッチ・学期情報を抽出
+  // Extract batch/semester info
   let currentBatch = '';
   let currentSem = '';
   let currentRoom = '';
@@ -66,25 +66,20 @@ function parseTimetableText(fullText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // バッチ検出 (例: "SP23-BCS" or "Semester 7")
     const semMatch = line.match(/semester\s*(\d)/i);
     if (semMatch) currentSem = semMatch[1];
 
     const batchMatch = line.match(/(SP|FA)\d{2}/i);
     if (batchMatch) currentBatch = batchMatch[0].toUpperCase();
 
-    // 部屋検出
     const roomMatch = line.match(roomRegex);
     if (roomMatch) currentRoom = roomMatch[0].toUpperCase();
 
-    // 曜日検出
     const dayMatch = DAYS.find(d => line.toLowerCase().includes(d.toLowerCase()));
     if (dayMatch) currentDay = dayMatch;
 
-    // 時間スロット + 科目名の行を検出
     const times = line.match(timeRegex);
     if (times && times.length >= 2 && currentRoom && currentDay) {
-      // 科目名を時間の前後から取得
       const subject = line
         .replace(timeRegex, '')
         .replace(roomRegex, '')
@@ -135,7 +130,6 @@ function parseTimetableText(fullText) {
   };
 }
 
-// ── メインエンドポイント: POST /upload-timetable ──────────────────────────
 app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No PDF file received.' });
 
@@ -150,7 +144,6 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
-    // Step 1: PDF → 画像変換
     console.log('🖼️  Converting PDF pages to images...');
     const converter = fromPath(pdfPath, {
       density: 200,
@@ -160,7 +153,6 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
       width: 2480,
     });
 
-    // ページ数取得（最大20ページ）
     const MAX_PAGES = 20;
     const pageImages = [];
     for (let p = 1; p <= MAX_PAGES; p++) {
@@ -178,7 +170,6 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
 
     if (pageImages.length === 0) throw new Error('No pages could be converted from PDF.');
 
-    // Step 2: OCRでテキスト抽出
     console.log(`🔍 Running OCR on ${pageImages.length} pages...`);
     let fullText = '';
     const worker = await Tesseract.createWorker('eng');
@@ -192,10 +183,8 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
 
     console.log('✅ OCR complete. Parsing timetable...');
 
-    // Step 3: テキスト → JSON変換
     const parsed = parseTimetableText(fullText);
 
-    // Step 4: Firestoreに保存
     console.log('💾 Saving to Firestore...');
     await saveToFirestore({
       version,
@@ -207,10 +196,9 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
       displayRows:  JSON.stringify(parsed.displayRows),
       subjectsList: JSON.stringify(parsed.subjectsList),
       lectureSlots: JSON.stringify(parsed.lectureSlots),
-      rawText:      fullText.slice(0, 5000), // デバッグ用（先頭5000文字）
+      rawText:      fullText.slice(0, 5000),
     });
 
-    // 一時ファイル削除
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.unlinkSync(pdfPath);
 
@@ -224,7 +212,6 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
     });
 
   } catch (err) {
-    // 一時ファイル削除
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
     try { fs.unlinkSync(pdfPath); } catch {}
 
@@ -233,7 +220,6 @@ app.post('/upload-timetable', upload.single('pdf'), async (req, res) => {
   }
 });
 
-// ── ヘルスチェック ────────────────────────────────────────────────────────
 app.get('/', (_, res) => res.json({ status: 'CampusAI Server running ✅' }));
 
 app.listen(PORT, '0.0.0.0', () => {

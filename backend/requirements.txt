@@ -1,0 +1,16 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+rapidfuzz>=3.6
+
+# RAG / vector search
+chromadb>=0.5
+
+# LangChain pipeline
+langchain>=0.2
+langchain-core>=0.2
+langchain-ollama>=0.1
+langchain-openai>=0.1
+
+# Security
+slowapi>=0.1.9

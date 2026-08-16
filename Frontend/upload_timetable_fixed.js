@@ -2,10 +2,10 @@
  * upload_timetable_fixed.js
  * CS Timetable w.e.f April 20, 2026
  *
- * 修正点: timetables/active に1つではなく
- *         timetables/cs_sem1 〜 cs_sem8 として学期ごとに書き込む
+ * Fix: instead of writing everything to timetables/active,
+ *      write one doc per semester: timetables/cs_sem1 … cs_sem8
  *
- * 実行方法: node upload_timetable_fixed.js
+ * Run: node upload_timetable_fixed.js
  */
 
 // ── Firebase Config ───────────────────────────────────────────────────────
@@ -248,7 +248,6 @@ async function main() {
   console.log("CS Timetable Upload — w.e.f April 20, 2026");
   console.log("============================================");
 
-  // 学期ごとにグループ化
   const bySem = {};
   for (const e of TIMETABLE_ENTRIES) {
     if (!bySem[e.sem]) bySem[e.sem] = [];

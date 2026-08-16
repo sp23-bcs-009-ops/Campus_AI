@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+chroma_db/
+*.log
+API.py.bak
+timetable.pdf
+test_interface.html
+runMudassir.bat
+START.txt

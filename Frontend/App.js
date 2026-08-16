@@ -7,6 +7,7 @@ import { C } from './src/constants/colors';
 import { NAV_TABS } from './src/constants/config';
 import useTimetable from './src/hooks/useTimetable';
 import useNotifs from './src/hooks/useNotifs';
+import { getAuthTokens, refreshAuthToken, clearAuthToken } from './src/firebase/firestore';
 
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -23,16 +24,28 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [now, setNow] = useState(new Date());
 
-  // ── Persistent login ──────────────────────────────────────────────────────
+  // ── Persistent login (profile + Firebase auth token) ─────────────────────
   useEffect(() => {
     AsyncStorage.getItem('campusai_user').then(val => {
       if (val) { setUser(JSON.parse(val)); setScreen('main'); }
     }).catch(() => { });
+    // Restore the Firebase session so writes stay authenticated after restart
+    AsyncStorage.getItem('campusai_refresh_token').then(tok => {
+      if (tok) refreshAuthToken(tok);
+    }).catch(() => { });
   }, []);
+
+  function persistAuthToken() {
+    const { refreshToken } = getAuthTokens();
+    if (refreshToken) {
+      AsyncStorage.setItem('campusai_refresh_token', refreshToken).catch(() => { });
+    }
+  }
 
   function handleLogin(u) {
     setUser(u);
     AsyncStorage.setItem('campusai_user', JSON.stringify(u)).catch(() => { });
+    persistAuthToken();
     setScreen('main');
   }
   function handleUpdate(u) {
@@ -41,6 +54,8 @@ export default function App() {
   }
   function handleLogout() {
     AsyncStorage.removeItem('campusai_user').catch(() => { });
+    AsyncStorage.removeItem('campusai_refresh_token').catch(() => { });
+    clearAuthToken();
     setUser(null); setScreen('login');
   }
 

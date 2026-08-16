@@ -3,6 +3,46 @@ import { FS_BASE, STORAGE_BASE, FIREBASE_CONFIG } from './config';
 const AUTH_BASE = `https://identitytoolkit.googleapis.com/v1/accounts`;
 const API_KEY   = FIREBASE_CONFIG.apiKey;
 
+// ── Auth token management ──────────────────────────────────────────────────
+// All Firestore WRITES send `Authorization: Bearer <idToken>` so the project
+// can use locked-down security rules (see firebase/firestore.rules).
+// Tokens are set automatically on sign-in/up and refreshed via refreshToken.
+let ID_TOKEN = null;
+let REFRESH_TOKEN = null;
+
+export function setAuthToken(idToken, refreshToken = null) {
+  ID_TOKEN = idToken || null;
+  if (refreshToken) REFRESH_TOKEN = refreshToken;
+}
+
+export function getAuthTokens() {
+  return { idToken: ID_TOKEN, refreshToken: REFRESH_TOKEN };
+}
+
+export function clearAuthToken() {
+  ID_TOKEN = null;
+  REFRESH_TOKEN = null;
+}
+
+/** Exchange a refresh token for a fresh ID token (called on app restart). */
+export async function refreshAuthToken(refreshToken) {
+  if (!refreshToken) return null;
+  try {
+    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+    });
+    const d = await r.json();
+    if (d.error) return null;
+    setAuthToken(d.id_token, d.refresh_token);
+    return d.id_token;
+  } catch { return null; }
+}
+
+function authHeaders(extra = {}) {
+  return ID_TOKEN ? { ...extra, Authorization: `Bearer ${ID_TOKEN}` } : extra;
+}
+
 // Firebase Auth
 export async function authSignUp(email, password) {
   const r = await fetch(`${AUTH_BASE}:signUp?key=${API_KEY}`, {
@@ -11,6 +51,7 @@ export async function authSignUp(email, password) {
   });
   const d = await r.json();
   if (d.error) throw new Error(d.error.message);
+  setAuthToken(d.idToken, d.refreshToken);
   return d;
 }
 
@@ -21,6 +62,7 @@ export async function authSignIn(email, password) {
   });
   const d = await r.json();
   if (d.error) throw new Error(d.error.message);
+  setAuthToken(d.idToken, d.refreshToken);
   return d;
 }
 
@@ -46,6 +88,7 @@ export async function authGoogleSignIn(idToken) {
   });
   const d = await r.json();
   if (d.error) throw new Error(d.error.message);
+  setAuthToken(d.idToken, d.refreshToken);
   return d;
 }
 
@@ -90,7 +133,7 @@ function deserialise(fields) {
 
 export async function fsGet(path) {
   try {
-    const r = await fetch(`${FS_BASE}/${path}`);
+    const r = await fetch(`${FS_BASE}/${path}`, { headers: authHeaders() });
     if (!r.ok) return null;
     const d = await r.json();
     return deserialise(d.fields || {});
@@ -100,7 +143,7 @@ export async function fsGet(path) {
 export async function fsSet(path, data) {
   const body = { fields: serialise(data) };
   const r = await fetch(`${FS_BASE}/${path}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(await r.text());
@@ -109,7 +152,7 @@ export async function fsSet(path, data) {
 export async function fsAdd(collection, data) {
   const body = { fields: serialise(data) };
   const r = await fetch(`${FS_BASE}/${collection}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
   const d = await r.json();
@@ -121,20 +164,20 @@ export async function fsUpdate(path, data) {
   const fields = Object.keys(data).map(k => `updateMask.fieldPaths=${k}`).join('&');
   const body = { fields: serialise(data) };
   const r = await fetch(`${FS_BASE}/${path}?${fields}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(await r.text());
 }
 
 export async function fsDelete(path) {
-  const r = await fetch(`${FS_BASE}/${path}`, { method: 'DELETE' });
+  const r = await fetch(`${FS_BASE}/${path}`, { method: 'DELETE', headers: authHeaders() });
   if (!r.ok) throw new Error(await r.text());
 }
 
 export async function fsList(collection) {
   try {
-    const r = await fetch(`${FS_BASE}/${collection}`);
+    const r = await fetch(`${FS_BASE}/${collection}`, { headers: authHeaders() });
     if (!r.ok) return [];
     const d = await r.json();
     return (d.documents || []).map(doc => ({
@@ -149,7 +192,7 @@ export async function storageUpload(storagePath, fileUri, mimeType = 'applicatio
   const blob = await response.blob();
   const uploadUrl = `${STORAGE_BASE}?uploadType=media&name=${encodeURIComponent(storagePath)}`;
   const r = await fetch(uploadUrl, {
-    method: 'POST', headers: { 'Content-Type': mimeType }, body: blob,
+    method: 'POST', headers: authHeaders({ 'Content-Type': mimeType }), body: blob,
   });
   if (!r.ok) {
     const errorText = await r.text();
