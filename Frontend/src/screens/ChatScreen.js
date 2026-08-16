@@ -15,6 +15,11 @@ export default function ChatScreen({ user, dark }) {
   const [loading, setLoading]   = useState(false);
   const scrollViewRef = useRef();
 
+  // Stable per-user session id → enables backend chat memory (follow-up questions)
+  const sessionIdRef = useRef(
+    (user?.uid || user?.email || 'guest') + '-' + Math.random().toString(36).slice(2, 10)
+  );
+
   // ── Theme tokens ──────────────────────────────────────────────────────────
   const bg         = dark ? '#0A0A1E' : '#F5F4FF';
   const cardBg     = dark ? '#12123A' : '#FFFFFF';
@@ -220,7 +225,7 @@ export default function ChatScreen({ user, dark }) {
       const res = await fetch(`${getAiServerUrl()}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({ question: q, session_id: sessionIdRef.current }),
       });
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`);

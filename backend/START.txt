@@ -1,5 +1,15 @@
-cd C:\Users\ZANI\CampusAI\CampusAI\backend
+cd backend
 
-venv\Scripts\activate
+# first time:
+pip install -r requirements.txt
 
+# run:
 python -m uvicorn API:app --reload
+
+# or with Docker (from repo root):
+docker compose up --build
+
+# demo day (OpenAI instead of local Ollama) — set 2 env vars:
+#   LLM_PROVIDER=openai
+#   OPENAI_API_KEY=sk-...
+# see backend/README.md for details

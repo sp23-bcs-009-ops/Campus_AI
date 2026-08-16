@@ -458,7 +458,7 @@
             const res = await fetch(`${BASE}/ask`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: q })
+                body: JSON.stringify({ question: q, session_id: 'test-ui' })
             });
             loader.remove();
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
