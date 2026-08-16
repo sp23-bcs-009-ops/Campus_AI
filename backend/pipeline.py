@@ -155,6 +155,26 @@ ROOMS_ALL_PHRASES = [
 ]
 
 
+def _teacher_name_actually_mentioned(question: str, teacher: str) -> bool:
+    """Verify a fuzzy teacher match: at least one real name token of the
+    teacher must appear (fuzzily) in the question. Prevents generic words
+    like 'are'/'classes' from matching 'Ms. Areeba'."""
+    from rapidfuzz import fuzz
+
+    q_tokens = [w for w in tt._words(question) if len(w) >= 4]
+    name_tokens = [
+        w for w in tt._words(teacher)
+        if len(w) >= 4 and w not in {"miss", "maam", "madam", "visiting", "professor"}
+    ]
+    if not q_tokens or not name_tokens:
+        return False
+    return any(
+        fuzz.ratio(qt, nt) >= 75
+        for qt in q_tokens
+        for nt in name_tokens
+    )
+
+
 def route(question: str, memory: SessionMemory) -> RoutedQuestion:
     q_lower = question.lower()
 
@@ -162,6 +182,10 @@ def route(question: str, memory: SessionMemory) -> RoutedQuestion:
     teacher = tt.detect_teacher(question)
     room = tt.detect_room(question)
     slot_filter, time_label = tt._make_time_filter(question)
+
+    # Reject fuzzy teacher false-positives (name never actually mentioned)
+    if teacher and not _teacher_name_actually_mentioned(question, teacher):
+        teacher = None
 
     # ── Follow-up resolution using entity memory ────────────────
     # "what about tuesday?" / "and on friday?" → reuse last entity

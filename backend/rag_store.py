@@ -38,8 +38,18 @@ class HashingEmbedder(chromadb.EmbeddingFunction):
 
     DIM = 512
 
+    def __init__(self):
+        super().__init__()
+
     def name(self) -> str:  # required by newer chromadb versions
         return "campus-ai-hashing-embedder"
+
+    def get_config(self) -> dict:
+        return {}
+
+    @staticmethod
+    def build_from_config(config: dict):
+        return HashingEmbedder()
 
     @staticmethod
     def _tokens(text: str):

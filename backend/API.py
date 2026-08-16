@@ -36,10 +36,13 @@ app = FastAPI(title="Campus AI", version="2.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# CORS: "*" with credentials is invalid per spec — only send credentials
+# when explicit origins are configured (CORS_ORIGINS env var).
+_open_cors = settings.cors_origins == ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.cors_origins,
+    allow_credentials=not _open_cors,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,6 +58,35 @@ def require_api_key(x_api_key: str | None = Header(default=None)):
 # Startup: build the vector store from the scraped COMSATS knowledge
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _knowledge_age_days() -> float | None:
+    """Age of the scraped COMSATS cache in days, or None if unknown."""
+    import datetime
+    data = load_comsats_knowledge()
+    stamp = data.get("updated_at")
+    if not stamp:
+        return None
+    try:
+        updated = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        now = datetime.datetime.now(datetime.timezone.utc)
+        return (now - updated).total_seconds() / 86400
+    except Exception:
+        return None
+
+
+def _auto_refresh_knowledge():
+    """Background thread: re-scrape COMSATS site if the cache is stale."""
+    try:
+        age = _knowledge_age_days()
+        if age is None or age < settings.knowledge_max_age_days:
+            return
+        print(f"[RAG] knowledge cache is {age:.0f} days old — refreshing in background…")
+        refresh_comsats_knowledge(max_pages=20)
+        count = rag_store.ingest_from_knowledge_file(force=True)
+        print(f"[RAG] background refresh done — {count} chunks re-indexed")
+    except Exception as e:
+        print(f"[RAG] background refresh failed (using cached data): {e}")
+
+
 @app.on_event("startup")
 def _startup():
     try:
@@ -65,6 +97,10 @@ def _startup():
     print(f"[LLM] {llm_info()}")
     if not settings.api_key:
         print("[AUTH] CAMPUS_AI_API_KEY not set — API is open (dev mode)")
+
+    if settings.knowledge_max_age_days > 0:
+        import threading
+        threading.Thread(target=_auto_refresh_knowledge, daemon=True).start()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

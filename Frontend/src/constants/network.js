@@ -38,6 +38,16 @@ export function getServerUrl(port, envOverrideName) {
   const override = getEnv(envOverrideName);
   if (override) return override.replace(/\/$/, '');
 
+  // Port-prefixed proxy hosts (e.g. cloud previews: "19006-abc.host.app")
+  // → swap the port prefix instead of appending ":port".
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const { hostname, protocol } = window.location;
+    const m = hostname.match(/^(\d+)-(.+)$/);
+    if (m && protocol === 'https:') {
+      return `https://${port}-${m[2]}`;
+    }
+  }
+
   return `http://${getDevHost()}:${port}`;
 }
 

@@ -246,7 +246,7 @@ export default function ChatScreen({ user, dark }) {
       console.error(err);
       let errorMsg = err.message;
       if (err.message.includes('Failed to fetch') || err.message.includes('Network request failed')) {
-        errorMsg = `Can't reach the backend at ${getAiServerUrl()}. Make sure it's running with runMudassir.bat.`;
+        errorMsg = `Can't reach the Campus AI backend at ${getAiServerUrl()}. Start it first (run START_CAMPUS_AI or: cd backend && uvicorn API:app).`;
       }
       setMessages(prev => [...prev, { role: 'error', text: `⚠️ ${errorMsg}` }]);
     } finally {
