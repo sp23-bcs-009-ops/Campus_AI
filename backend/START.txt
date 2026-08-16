@@ -1,0 +1,5 @@
+cd C:\Users\ZANI\CampusAI\CampusAI\backend
+
+venv\Scripts\activate
+
+python -m uvicorn API:app --reload
